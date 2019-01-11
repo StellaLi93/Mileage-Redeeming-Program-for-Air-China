@@ -1,0 +1,239 @@
+from tinydb import TinyDB, Query, where
+from tinydb.operations import add
+import uuid
+import pandas
+
+db_log = TinyDB('./db_log.json')
+db_info = TinyDB('./db_info.json')
+
+# DataBase Scheme
+# ---------------------------
+# Data.db
+#   - user_id - UNIQUE
+#   - user_name
+#   - Mileage
+#   - Total_Mileage
+#   - Bios
+#----------------------------
+# log.db
+#   - user_id
+#   - operation: 'ADD' or 'SUB' for Mileage
+#   - amount : operation influence
+#   - FROM: operation ticket from
+#   - TO: operation ticket from
+#   - ROUND_TRIP: if it is round trip
+
+CA_Table_Round = {  # Unit: kilo kilometers
+    "B": {"A": {"Eco": 45,  "Bus": 90,  "Fir": 120}},
+    "C": {"A": {"Eco": 45,  "Bus": 80,  "Fir": 120}},
+    "D": {"A": {"Eco": 50,  "Bus": 110, "Fir": 170}},
+    "E": {"A": {"Eco": 50,  "Bus": 70,  "Fir": 100}},
+    "F": {"A": {"Eco": 90,  "Bus": 180, "Fir": 260}, "F": {"Eco": 35, "Bus": 50,  "Fir": 60}, "L": {"Eco": 60, "Bus": 110, "Fir": 150}},
+    "G": {"A": {"Eco": 100, "Bus": 200, "Fir": 280}, "G": {"Eco": 26, "Bus": 50,  "Fir": 80}},
+    "H": {"A": {"Eco": 100, "Bus": 200, "Fir": 280}},
+    "I": {"A": {"Eco": 140, "Bus": 190, "Fir": 240}, "F": {"Eco": 90, "Bus": 130, "Fir": 180}},
+    "J": {"A": {"Eco": 120, "Bus": 180, "Fir": 240}, "H": {"Eco": 40, "Bus": 72,  "Fir": 100}},
+    "K": {"A": {"Eco": 100, "Bus": 200, "Fir": 280}},
+    "L": {"A": {"Eco": 50,  "Bus": 90,  "Fir": 130}, "F": {"Eco": 60, "Bus": 110, "Fir": 150}, "L": {"Eco": 35, "Bus": 50, "Fir": 60}}
+}
+
+CA_Table_One_way = {  # Unit: kilo kilometers
+    "B": {"A": {"Eco": 25, "Bus": 53,  "Fir": 75}},
+    "C": {"A": {"Eco": 25, "Bus": 47,  "Fir": 75}},
+    "D": {"A": {"Eco": 30, "Bus": 60,  "Fir": 98}},
+    "E": {"A": {"Eco": 30, "Bus": 45,  "Fir": 65}},
+    "F": {"A": {"Eco": 50, "Bus": 100, "Fir": 150}, "F": {"Eco": 18, "Bus": 32, "Fir": 42}, "L": {"Eco": 35, "Bus": 59, "Fir": 81}},
+    "G": {"A": {"Eco": 60, "Bus": 110, "Fir": 155}, "G": {"Eco": 15, "Bus": 32, "Fir": 45}},
+    "H": {"A": {"Eco": 60, "Bus": 120, "Fir": 160}},
+    "I": {"A": {"Eco": 100, "Bus": 120, "Fir": 160}, "F": {"Eco": 50, "Bus": 80, "Fir": 120}},
+    "J": {"A": {"Eco": 80, "Bus": 120, "Fir": 160}, "H": {"Eco": 20, "Bus": 44, "Fir": 60}},
+    "K": {"A": {"Eco": 60, "Bus": 120, "Fir": 160}},
+    "L": {"A": {"Eco": 30, "Bus": 45,  "Fir": 65},  "F": {"Eco": 35, "Bus": 59, "Fir": 81},  "L": {"Eco": 20, "Bus": 30, "Fir": 40}}
+}
+
+SA_Table_One_way = {
+    "D": {"A": {"Eco": 36, "Bus": 79, "Fir": 122}, "B": {"Eco": 30, "Bus": 42, "Fir": 48}, "C": {"Eco": 39, "Bus": 54, "Fir": 62}, "D": {"Eco": 24, "Bus": 38, "Fir": 43}, },
+    "C": {"A": {"Eco": 36, "Bus": 63, "Fir": 81}, "B": {"Eco": 36, "Bus": 57, "Fir": 72}, "C": {"Eco": 24, "Bus": 38, "Fir": 43}, },
+    "B": {"A": {"Eco": 33, "Bus": 64, "Fir": 75}, "B": {"Eco": 21, "Bus": 28, "Fir": 38}, },
+    "G": {"A": {"Eco": 78, "Bus": 147, "Fir": 178}, "B": {"Eco": 45, "Bus": 67, "Fir": 81}, "C": {"Eco": 78, "Bus": 117, "Fir": 140}, "D": {"Eco": 51, "Bus": 71, "Fir": 81}, "E": {"Eco": 99, "Bus": 148, "Fir": 178}, "F": {"Eco": 96, "Bus": 153, "Fir": 192}, "G": {"Eco": 24, "Bus": 45, "Fir": 69}, },
+    "L": {"A": {"Eco": 76, "Bus": 106, "Fir": 122}, "B": {"Eco": 78, "Bus": 117, "Fir": 156}, "C": {"Eco": 89, "Bus": 134, "Fir": 161}, "D": {"Eco": 72, "Bus": 100, "Fir": 115}, "E": {"Eco": 99, "Bus": 129, "Fir": 148}, "F": {"Eco": 69, "Bus": 153, "Fir": 207}, "G": {"Eco": 90, "Bus": 135, "Fir": 162}, "H": {"Eco": 82, "Bus": 124, "Fir": 165}, "I": {"Eco": 82, "Bus": 124, "Fir": 207}, "J": {"Eco": 84, "Bus": 117, "Fir": 134}, "K": {"Eco": 87, "Bus": 130, "Fir": 160}, "L": {"Eco": 30, "Bus": 42, "Fir": 51}, },
+    "I": {"A": {"Eco": 96, "Bus": 153, "Fir": 192}, "B": {"Eco": 90, "Bus": 135, "Fir": 180}, "C": {"Eco": 66, "Bus": 99, "Fir": 118}, "D": {"Eco": 85, "Bus": 129, "Fir": 154}, "E": {"Eco": 85, "Bus": 129, "Fir": 154}, "F": {"Eco": 72, "Bus": 115, "Fir": 144}, "G": {"Eco": 72, "Bus": 115, "Fir": 144}, "H": {"Eco": 66, "Bus": 99, "Fir": 132}, "I": {"Eco": 24, "Bus": 36, "Fir": 43}, },
+    "H": {"A": {"Eco": 72, "Bus": 142, "Fir": 183}, "B": {"Eco": 66, "Bus": 105, "Fir": 132}, "C": {"Eco": 60, "Bus": 96, "Fir": 126}, "D": {"Eco": 76, "Bus": 123, "Fir": 153}, "E": {"Eco": 82, "Bus": 124, "Fir": 165}, "F": {"Eco": 66, "Bus": 99, "Fir": 132}, "G": {"Eco": 75, "Bus": 112, "Fir": 150}, "H": {"Eco": 37, "Bus": 55, "Fir": 74}, },
+    "J": {"A": {"Eco": 90, "Bus": 135, "Fir": 180}, "B": {"Eco": 90, "Bus": 135, "Fir": 180}, "C": {"Eco": 60, "Bus": 96, "Fir": 126}, "D": {"Eco": 90, "Bus": 126, "Fir": 144}, "E": {"Eco": 84, "Bus": 117, "Fir": 134}, "F": {"Eco": 84, "Bus": 117, "Fir": 134}, "G": {"Eco": 66, "Bus": 105, "Fir": 132}, "H": {"Eco": 48, "Bus": 72, "Fir": 96}, "I": {"Eco": 33, "Bus": 52, "Fir": 66}, "J": {"Eco": 24, "Bus": 36, "Fir": 43}, },
+    "F": {"A": {"Eco": 66, "Bus": 123, "Fir": 171}, "B": {"Eco": 51, "Bus": 81, "Fir": 102}, "C": {"Eco": 78, "Bus": 124, "Fir": 156}, "D": {"Eco": 60, "Bus": 96, "Fir": 120}, "E": {"Eco": 85, "Bus": 137, "Fir": 171}, "F": {"Eco": 24, "Bus": 36, "Fir": 43}, },
+    "E": {"A": {"Eco": 43, "Bus": 64, "Fir": 77}, "B": {"Eco": 46, "Bus": 69, "Fir": 82}, "C": {"Eco": 57, "Bus": 84, "Fir": 100}, "D": {"Eco": 36, "Bus": 50, "Fir": 57}, "E": {"Eco": 26, "Bus": 42, "Fir": 52}, },
+    "K": {"A": {"Eco": 90, "Bus": 135, "Fir": 180}, "B": {"Eco": 78, "Bus": 117, "Fir": 156}, "C": {"Eco": 72, "Bus": 115, "Fir": 144}, "D": {"Eco": 78, "Bus": 117, "Fir": 140}, "E": {"Eco": 78, "Bus": 117, "Fir": 140}, "F": {"Eco": 87, "Bus": 130, "Fir": 160}, "G": {"Eco": 78, "Bus": 117, "Fir": 140}, "H": {"Eco": 60, "Bus": 96, "Fir": 120}, "I": {"Eco": 78, "Bus": 117, "Fir": 156}, "J": {"Eco": 51, "Bus": 71, "Fir": 81}, },
+    "A": {"A": {"Eco": 25, "Bus": 45, "Fir": 48}, }
+}
+
+SA_Table_Round = {
+    "G": {"A": {"Eco": 130, "Bus": 246, "Fir": 298}, "B": {"Eco": 75, "Bus": 113, "Fir": 135}, "C": {"Eco": 130, "Bus": 195, "Fir": 234}, "D": {"Eco": 85, "Bus": 119, "Fir": 136}, "E": {"Eco": 165, "Bus": 248, "Fir": 297}, "F": {"Eco": 160, "Bus": 256, "Fir": 320}, "G": {"Eco": 40, "Bus": 75, "Fir": 115}, },
+    "J": {"A": {"Eco": 150, "Bus": 225, "Fir": 300}, "B": {"Eco": 150, "Bus": 225, "Fir": 300}, "C": {"Eco": 100, "Bus": 160, "Fir": 210}, "D": {"Eco": 150, "Bus": 210, "Fir": 240}, "E": {"Eco": 140, "Bus": 196, "Fir": 224}, "F": {"Eco": 140, "Bus": 196, "Fir": 224}, "G": {"Eco": 110, "Bus": 176, "Fir": 220}, "H": {"Eco": 80, "Bus": 120, "Fir": 160}, "I": {"Eco": 55, "Bus": 88, "Fir": 110}, "J": {"Eco": 40, "Bus": 60, "Fir": 72}, },
+    "E": {"A": {"Eco": 72, "Bus": 108, "Fir": 129}, "B": {"Eco": 77, "Bus": 116, "Fir": 138}, "C": {"Eco": 95, "Bus": 141, "Fir": 168}, "D": {"Eco": 60, "Bus": 84, "Fir": 96}, "E": {"Eco": 44, "Bus": 70, "Fir": 88}, },
+    "F": {"A": {"Eco": 110, "Bus": 206, "Fir": 286}, "B": {"Eco": 85, "Bus": 136, "Fir": 170}, "C": {"Eco": 130, "Bus": 208, "Fir": 260}, "D": {"Eco": 100, "Bus": 160, "Fir": 200}, "E": {"Eco": 143, "Bus": 229, "Fir": 286}, "F": {"Eco": 40, "Bus": 60, "Fir": 72}, },
+    "B": {"A": {"Eco": 55, "Bus": 108, "Fir": 126}, "B": {"Eco": 36, "Bus": 47, "Fir": 64}, },
+    "K": {"A": {"Eco": 150, "Bus": 225, "Fir": 300}, "B": {"Eco": 130, "Bus": 195, "Fir": 260}, "C": {"Eco": 120, "Bus": 192, "Fir": 240}, "D": {"Eco": 130, "Bus": 195, "Fir": 234}, "E": {"Eco": 130, "Bus": 195, "Fir": 234}, "F": {"Eco": 145, "Bus": 217, "Fir": 268}, "G": {"Eco": 130, "Bus": 195, "Fir": 234}, "H": {"Eco": 100, "Bus": 160, "Fir": 200}, "I": {"Eco": 130, "Bus": 195, "Fir": 260}, "J": {"Eco": 85, "Bus": 119, "Fir": 136}, },
+    "C": {"A": {"Eco": 60, "Bus": 106, "Fir": 136}, "B": {"Eco": 60, "Bus": 96, "Fir": 120}, "C": {"Eco": 40, "Bus": 64, "Fir": 72}, },
+    "L": {"A": {"Eco": 127, "Bus": 177, "Fir": 204}, "B": {"Eco": 130, "Bus": 195, "Fir": 260}, "C": {"Eco": 149, "Bus": 224, "Fir": 269}, "D": {"Eco": 120, "Bus": 168, "Fir": 192}, "E": {"Eco": 165, "Bus": 215, "Fir": 248}, "F": {"Eco": 115, "Bus": 256, "Fir": 346}, "G": {"Eco": 150, "Bus": 225, "Fir": 270}, "H": {"Eco": 138, "Bus": 207, "Fir": 276}, "I": {"Eco": 138, "Bus": 207, "Fir": 248}, "J": {"Eco": 140, "Bus": 196, "Fir": 224}, "K": {"Eco": 145, "Bus": 217, "Fir": 268}, "L": {"Eco": 50, "Bus": 70, "Fir": 85}, },
+    "H": {"A": {"Eco": 120, "Bus": 238, "Fir": 305}, "B": {"Eco": 110, "Bus": 176, "Fir": 220}, "C": {"Eco": 100, "Bus": 160, "Fir": 210}, "D": {"Eco": 128, "Bus": 205, "Fir": 256}, "E": {"Eco": 138, "Bus": 207, "Fir": 275}, "F": {"Eco": 110, "Bus": 165, "Fir": 220}, "G": {"Eco": 125, "Bus": 188, "Fir": 250}, "H": {"Eco": 62, "Bus": 93, "Fir": 124}, },
+    "D": {"A": {"Eco": 60, "Bus": 132, "Fir": 204}, "B": {"Eco": 50, "Bus": 70, "Fir": 80}, "C": {"Eco": 65, "Bus": 91, "Fir": 104}, "D": {"Eco": 40, "Bus": 64, "Fir": 72}, },
+    "I": {"A": {"Eco": 160, "Bus": 256, "Fir": 320}, "B": {"Eco": 150, "Bus": 225, "Fir": 300}, "C": {"Eco": 110, "Bus": 165, "Fir": 198}, "D": {"Eco": 143, "Bus": 215, "Fir": 257}, "E": {"Eco": 143, "Bus": 215, "Fir": 257}, "F": {"Eco": 120, "Bus": 192, "Fir": 240}, "G": {"Eco": 120, "Bus": 192, "Fir": 240}, "H": {"Eco": 110, "Bus": 165, "Fir": 220}, "I": {"Eco": 40, "Bus": 60, "Fir": 72}, },
+    "A": {"A": {"Eco": 43, "Bus": 76, "Fir": 80}, }
+}
+
+def Import_User(uid, user_name, Milleage, Total_Mileage, Bios):
+    
+    if db_info.search(where('user_id') == uid): 
+        raise BaseException("User ID confilct!")
+
+    db_info.insert(
+        {
+            "user_id": str(uid),
+            "user_name": user_name,
+            "Mileage": Milleage,      # Obviously
+            "Total_Mileage": Total_Mileage,
+            "Bios":Bios
+        }
+    )
+
+def New_User(user_name):
+
+    # Need Tested
+
+    uid = uuid.uuid5(uuid.NAMESPACE_DNS, str(uuid.uuid1()))
+    while db_info.search(where('user_id') == uid):
+        uid = uuid.uuid5(uuid.NAMESPACE_DNS, str(uuid.uuid1()))
+
+    db_info.insert(
+        {
+            "user_id": str(uid),
+            "user_name": user_name,
+            "Mileage": 0,      # Obviously
+            "Total_Mileage": 0,
+            "Bios":[]
+        }
+    )
+    return uid
+
+
+def INS_Log(uid, op, amount, F, T):
+    if db_info.search(where('user_id') == uid):
+        db_log.insert(
+            {
+                "user_id": uid,
+                "operation": op,
+                "amount": amount,
+                "FROM": F,
+                "TO": T
+            }
+        )
+    else:
+        raise BaseException("User id not Found")
+
+
+def Change_INFO(uid, delta):
+    if db_info.search(where('user_id') == uid):
+        assert len(db_info.search(where('user_id') == uid)) == 1
+        D = db_info.search(where('user_id') == uid)[0]
+        # D["Mileage"] + delta
+        if delta > 0:
+            db_info.update(
+                {"Mileage": D["Mileage"] + delta, "Total_Mileage": D["Total_Mileage"] + delta}, where('user_id') == uid)
+        else:
+            db_info.update(
+                {"Mileage": D["Mileage"] + delta}, where('user_id') == uid)
+    else:
+        raise BaseException("User id not Found")
+
+
+def User_buy_a_ticket(uid, FROM, TO, AMOUNT):
+    # Ins_log
+    # Ins data to data.db
+
+    # Need Tested
+
+    INS_Log(uid, "ADD", AMOUNT, FROM, TO)
+    Change_INFO(uid, AMOUNT)
+
+
+def Search_gift_Mileage(F, T, Distance, Airline="CA", Round_trip=False, Seat_Class="Eco"):
+
+    if Airline == "CA":
+        if F == T == "A":
+            if Distance < 800:
+                return ({"Eco": 15000, "Bus": 27000, "Fir": 30000} if Round_trip else {"Eco":  8000, "Bus": 15000, "Fir": 20000})[Seat_Class]
+            elif Distance < 1200:
+                return ({"Eco": 22000, "Bus": 35000, "Fir": 37000} if Round_trip else {"Eco": 12000, "Bus": 21000, "Fir": 25000})[Seat_Class]
+            elif Distance < 2000:
+                return ({"Eco": 26000, "Bus": 45000, "Fir": 48000} if Round_trip else {"Eco": 15000, "Bus": 26000, "Fir": 30000})[Seat_Class]
+            else:
+                return ({"Eco": 36000, "Bus": 62000, "Fir": 65000} if Round_trip else {"Eco": 20000, "Bus": 34000, "Fir": 40000})[Seat_Class]
+        else:
+            return 1000 * (CA_Table_Round if Round_trip else CA_Table_One_way)[F][T][Seat_Class]
+    elif Airline == "SA":
+        if ord(F) < ord(T):
+            F, T = T, F
+        return 1000 * (SA_Table_Round if Round_trip else SA_Table_One_way)[F][T][Seat_Class]
+
+    else:
+        raise BaseException("Such kind of ticket does not exist")
+
+
+def Airline_gift_a_ticket(uid, FROM, TO, Distance, Airline="CA", Round_trip=False, Seat_Class="Eco"):
+    # 1. Calculate how many mileage should use
+    # 2. if available, do it, then minus mileage from Data.db
+    # 3. Insert a log
+    # Note: There are two kind of Airline, "CA" for China Airline Corp. and "SA" for Other Star Alliance members
+    # Note: Seat_Class: Eco, Bus, Fir
+
+    # Need Tested
+
+    Usr_Data = db_info.search(where('user_id') == uid)
+    assert len(Usr_Data) <= 1
+    if len(Usr_Data) == 1:
+        M = Search_gift_Mileage(
+            FROM, TO, Distance, Airline, Round_trip, Seat_Class)
+        if Usr_Data[0]["Mileage"] >= M:
+
+            Change_INFO(uid, -1 * M)
+            INS_Log(uid, "SUB", M, FROM, TO)
+
+            return True, "ticket gifted"
+        else:
+            return False, "No enough mileage remained"
+    else:
+        return False, "User Does Not Exist"
+
+
+def Output_All_data():
+    return {
+        "info": pandas.DataFrame(db_info.search(lambda x: True)),
+        "log": pandas.DataFrame(db_log.search(lambda x: True)),
+    }
+
+def User_Class_filter(uid):
+    M = db_info.search(where('user_id') == uid)
+    if M:
+        assert len(M) == 1
+        D = M[0]
+        if   D["Total_Mileage"] > 1000000:
+            return "Extra-platinum"
+        elif D["Total_Mileage"] > 160000:
+            return "Platinum"
+        elif D["Total_Mileage"] > 80000:
+            return "Gold"
+        elif D["Total_Mileage"] > 40000:
+            return "Silver"
+        else: return "Gerenal"
+    else:
+        raise BaseException("Such user does not exist")
+
+
+
+if __name__ == "__main__":
+
+    # init & test
+
+    # New_User("hfsioerfh")
+
+    pass
