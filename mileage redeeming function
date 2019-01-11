@@ -1,0 +1,66 @@
+# This program is to help the clients who want to redeem a free ticket by using their mileage
+# It should be searched by UserID
+# --------------------------------------------------------------------------------------------
+# Note:
+# 1. ORI = Origin
+# 2. DST = Destination
+# 3. CA = Air China
+# 4. SA = Star Alliance
+# 5. Eco = Economy Class
+# 6. Bus = Business Class
+# 7. Fir = First Class
+
+
+import bg
+from tinydb import where
+
+uid = input('Input the customer ID you search: ')
+
+if bg.db_info.search(where('user_id') == uid):
+    infos = bg.db_info.search(where('user_id') == uid)[0]
+    print('id: %s\t\tName: %s\nRemaining Mileage: %s\nTotal Mileage: %s\nBio: %s'%(
+        infos['user_id'],
+        infos['user_name'],
+        infos['Mileage'],
+        infos['Total_Mileage'],
+        repr(infos['Bios'])
+    ))
+else:
+    print('User w/ id:%s does not'%uid)
+    exit(0)
+
+YES_OR_NO = input('Does the customer wanna redeem a free ticket(y for yes others for no)? ')
+if YES_OR_NO != 'y':
+    exit(0)
+
+ORI = input('Input the origin of customer(from A to L, stands for Area A to L): ')
+DST = input('Input the destination of customer(from A to L, stands for Area A to L): ')
+assert ORI in 'ABCDEFGHIJKL' and DST in 'ABCDEFGHIJKL'
+
+M = bg.db_info.search(where('user_id') == uid)[0]['Mileage']
+
+print('Airline\tRound?\tSeat\tDistance')
+
+if ORI == DST == 'A':
+    for Distance in [(799, '<800'), (1199, '800-1200'), (1999, '1200-2000'), (5000, '>2000')]:
+        for Seat in ['Eco', 'Bus', 'Fir']:
+            for Round in [True, False]:
+                if bg.Search_gift_Mileage(ORI, DST, Distance[0], 'CA', Round, Seat) <= M:
+                    print('%s\t%s\t%s\t%s'%(
+                        'SA', 'Round' if Round else 'OneWay', Seat, Distance[1]
+                    ))
+
+    for Seat in ['Eco', 'Bus', 'Fir']:
+        for Round in [True, False]:
+            if bg.Search_gift_Mileage(ORI, DST, 0, "SA", Round, Seat) <= M:
+                print('%s\t%s\t%s\t%s'%(
+                    'SA', 'Round' if Round else 'OneWay', Seat, 'INF'
+                ))
+else:
+    for Airline in ['CA', 'SA']:
+        for Seat in ['Eco', 'Bus', 'Fir']:
+            for Round in [True, False]:
+                if bg.Search_gift_Mileage(ORI, DST,  0, 'SA', Round, Seat):
+                    print('%s\t%s\t%s\t%s'%(
+                        Airline, 'Round' if Round else 'OneWay', Seat, 'INF'
+                    ))
