@@ -1,0 +1,13 @@
+import os, sys, glob
+for i in glob.glob("./*.json"): os.remove(i)
+
+import bg, uuid
+for i in glob.glob("./tests/*test.py"):
+    Q = __import__("tests."+os.path.splitext(os.path.basename(i))[0],fromlist=["*"])
+    for i in dir(Q):
+        if not i.startswith("__"):
+            globals()[i+"-"+str(uuid.uuid1())]  = getattr(Q, i)  # Avoid conflict
+
+
+import unittest
+unittest.main()
